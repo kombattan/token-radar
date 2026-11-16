@@ -1,7 +1,7 @@
 // Token Launch Radar — entrypoint.
 //
 // Reads the sealed DefiLlama snapshot, builds the ranked board of
-// pre-token protocols with the radar-2 model (lib/model.ts), and writes
+// pre-token protocols with the radar-3 model (lib/model.ts), and writes
 // everything the dossier needs into the output directory:
 //   board.json    the ranked board, one row per protocol
 //   data.js       the dashboard's data payload (window.RADAR)

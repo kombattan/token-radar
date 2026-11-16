@@ -8,7 +8,49 @@
 </head>
 <body>
 <a class="skip" href="#board">Skip to the board</a>
-<main id="board" tabindex="-1" aria-busy="true"></main>
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="kicker">Token Launch Radar</p>
+    <h1>Every protocol with no token yet, priced by the ones that have one.</h1>
+    <p class="lede">A ranked board of pre-token protocols from a sealed DefiLlama
+    snapshot. Each row's implied value is fitted from the snapshot's own
+    tokenized protocols — a market-cap curve over TVL, a per-category
+    adjustment, and fitted effects for momentum, chain breadth and age —
+    never from a hand-picked multiple. Click any row to see its price
+    rebuilt piece by piece, and the farm plan that goes with it.</p>
+    <div class="stats" id="stats" aria-label="Board summary"></div>
+  </div>
+</header>
+<main>
+  <section class="controls" aria-label="Board controls">
+    <label class="control grow">Search
+      <input id="q" type="search" placeholder="Protocol, slug or chain" autocomplete="off">
+    </label>
+    <label class="control">Category
+      <select id="cat"><option value="">All categories</option></select>
+    </label>
+    <label class="control">Sort
+      <select id="sort">
+        <option value="rank">Implied value</option>
+        <option value="tvl">TVL</option>
+        <option value="change">7d TVL change</option>
+        <option value="ratio">Implied / TVL</option>
+      </select>
+    </label>
+    <label class="control check">
+      <input id="watch" type="checkbox"> Watchlist only
+    </label>
+    <p class="count" id="count" role="status"></p>
+  </section>
+  <section id="board" tabindex="-1" aria-busy="true"></section>
+  <section id="detail" hidden></section>
+  <section class="method" id="method"></section>
+</main>
+<footer>
+  <p>Built by an AI agent from a sealed snapshot: no live prices, no network,
+  nothing on this page was fetched. The model is fitted, not asserted — its
+  parameters are printed above, and every row recomputes in your browser.</p>
+</footer>
 <script src="../data.js"></script>
 <script src="app.js"></script>
 </body>
