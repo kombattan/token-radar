@@ -145,3 +145,18 @@ footer {
   .prow { grid-template-columns: 1.4fr 0.8fr 0.8fr; }
   .prow span:last-child { display: none; }
 }
+
+.chart { margin: 16px 0 8px; }
+.chart svg { width: 100%; height: auto; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .fitline { stroke: var(--amber); stroke-width: 2; }
+.chart circle.peer { fill: var(--muted); opacity: .55; }
+.chart circle.rowpt { fill: var(--green); opacity: .85; }
+.chart .tick { fill: var(--muted); font-size: 11px; }
+.chart .legend { margin-top: 8px; color: var(--muted); font-size: 13px; }
+.chart .legend .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 5px 0 14px; }
+.chart .legend .dot:first-child { margin-left: 0; }
+.chart .legend .peerdot { background: var(--muted); }
+.chart .legend .rowdot { background: var(--green); }
+.chart .legend .swatch { display: inline-block; width: 16px; height: 3px; background: var(--amber); vertical-align: middle; margin: 0 5px 0 14px; }
+.chart .caption { color: var(--muted); font-size: 13px; margin-top: 6px; }

@@ -187,6 +187,32 @@ function openDetail(slug) {
   $("#detail").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function fittedChart() {
+  const W = 880, H = 440, L = 74, R = 14, T = 12, B = 42;
+  const x0 = 6, x1 = 11.6, y0 = 4.4, y1 = 10.7;
+  const px = (lx) => L + ((lx - x0) / (x1 - x0)) * (W - L - R);
+  const py = (ly) => T + (1 - (ly - y0) / (y1 - y0)) * (H - T - B);
+  const LN10 = Math.log(10);
+  const lineY = (lx) => (model.alpha + model.beta * lx * LN10) / LN10;
+  let s = "";
+  for (let g = Math.ceil(x0); g <= x1; g++) {
+    s += `<line x1="${px(g).toFixed(1)}" y1="${T}" x2="${px(g).toFixed(1)}" y2="${H - B}" class="grid"/>` +
+      `<text x="${px(g).toFixed(1)}" y="${H - B + 17}" class="tick" text-anchor="middle">${money(Math.pow(10, g))}</text>`;
+  }
+  for (let g = Math.ceil(y0); g <= y1; g++) {
+    s += `<line x1="${L}" y1="${py(g).toFixed(1)}" x2="${W - R}" y2="${py(g).toFixed(1)}" class="grid"/>` +
+      `<text x="${L - 7}" y="${(py(g) + 3).toFixed(1)}" class="tick" text-anchor="end">${money(Math.pow(10, g))}</text>`;
+  }
+  s += `<line x1="${px(x0).toFixed(1)}" y1="${py(lineY(x0)).toFixed(1)}" x2="${px(x1).toFixed(1)}" y2="${py(lineY(x1)).toFixed(1)}" class="fitline"/>`;
+  for (const p of peers) {
+    s += `<circle cx="${px(Math.log10(p.tvl_usd)).toFixed(1)}" cy="${py(Math.log10(p.mcap_usd)).toFixed(1)}" r="3" class="peer"/>`;
+  }
+  for (const r of rows) {
+    s += `<circle cx="${px(Math.log10(r.tvl_usd)).toFixed(1)}" cy="${py(Math.log10(r.implied_value_usd)).toFixed(1)}" r="3.2" class="rowpt"/>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Log-log scatter of peer market caps and board implied values against TVL with the fitted curve">${s}</svg>`;
+}
+
 function renderMethod() {
   const catRows = R.categories
     .map(
@@ -209,6 +235,25 @@ function renderMethod() {
     ${Math.pow(10, model.beta).toFixed(1)} times more, not ten times more. The
     residual spread is ${model.residual_sd.toFixed(2)} log points — wide, which is
     why no single row should be read as a promise.</p>
+    <div class="chart">${fittedChart()}
+      <div class="legend"><span class="dot peerdot"></span>tokenized peers, at their actual market caps
+      <span class="dot rowdot"></span>board rows, at their implied values
+      <span class="swatch"></span>the fitted curve</div>
+      <p class="caption">Both axes are log scales; the horizontal axis is TVL. The
+      peers scatter widely around the curve — that spread is the market's real
+      dispersion, and the model's honest uncertainty. The board rows hug the line
+      because they are plotted at the curve price after their category offset and
+      fitted factor adjustments, which are small next to the curve itself.</p>
+    </div>
+    <p><strong>Sensitivity.</strong> Priced the simple way — every protocol at the
+    peers' median market-cap/TVL multiple of ${model.sensitivity.median_multiple.toFixed(3)}x —
+    the ranking never changes with price at all: a constant multiple leaves the
+    board in raw TVL order. Against that flat ranking, the fitted model's board
+    correlates at Spearman ${model.sensitivity.spearman_vs_flat.toFixed(2)}, and
+    ${model.sensitivity.top25_overlap} of the flat top 25 stay in the fitted top 25.
+    The gap between the two rankings is the curve at work: its sub-linear slope
+    stops sheer size from crowning the board, and the category offsets and
+    factors do the rest of the reordering.</p>
     <p><strong>Category offsets.</strong> Each category's peers vote for an
     intercept above or below the curve, shrunk toward zero by peer count
     (prior strength ${model.category_shrink_k}): a category with two peers is

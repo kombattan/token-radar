@@ -535,6 +535,40 @@ export function dashboardData(snapshot: Snapshot, rows: BoardRow[]) {
       multiple: round4(Math.exp(c.offset)),
     }))
     .sort((a, b) => a.category.localeCompare(b.category));
+  // Sensitivity: price the same board with the flat model this radar
+  // replaced — every protocol at the peers' median market-cap/TVL
+  // multiple — and compare the two rankings. A constant multiple never
+  // changes an ordering, so the flat ranking is the TVL ranking; the
+  // fitted curve earns its complexity only if it moves the board.
+  const ratios = peers
+    .map((p) => (p.mcap_usd as number) / p.tvl_usd)
+    .sort((a, b) => a - b);
+  const medianMultiple =
+    ratios.length % 2 === 1
+      ? ratios[(ratios.length - 1) / 2]
+      : (ratios[ratios.length / 2 - 1] + ratios[ratios.length / 2]) / 2;
+  const flatRank = new Map<string, number>();
+  [...rows]
+    .sort(
+      (a, b) =>
+        b.tvl_usd - a.tvl_usd || a.slug.localeCompare(b.slug),
+    )
+    .forEach((r, i) => flatRank.set(r.slug, i + 1));
+  const meanRank = (rows.length + 1) / 2;
+  let cov = 0;
+  let varSum = 0;
+  for (const r of rows) {
+    const d = r.rank - meanRank;
+    cov += d * ((flatRank.get(r.slug) as number) - meanRank);
+    varSum += d * d;
+  }
+  const spearman = varSum > 0 ? cov / varSum : 1;
+  const fittedTop = new Set(
+    rows.filter((r) => r.rank <= 25).map((r) => r.slug),
+  );
+  const top25Overlap = [...flatRank.entries()]
+    .filter(([, rk]) => rk <= 25)
+    .filter(([slug]) => fittedTop.has(slug)).length;
   return {
     as_of: snapshot.as_of,
     source: snapshot.source,
@@ -550,6 +584,11 @@ export function dashboardData(snapshot: Snapshot, rows: BoardRow[]) {
         momentum: round4(fit.slopes.momentum),
         breadth: round4(fit.slopes.breadth),
         age: round4(fit.slopes.age),
+      },
+      sensitivity: {
+        median_multiple: round4(medianMultiple),
+        spearman_vs_flat: round4(spearman),
+        top25_overlap: top25Overlap,
       },
     },
     rows,
