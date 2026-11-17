@@ -33,6 +33,12 @@ function pct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
+// A share stored as a fraction (0.7) printed as a percent (70%).
+function sharePct(v) {
+  const p = v * 100;
+  return `${Number.isInteger(p) ? p : p.toFixed(1)}%`;
+}
+
 function pctClass(v) {
   return v > 0.05 ? "pos" : v < -0.05 ? "neg" : "";
 }
@@ -254,6 +260,29 @@ function renderMethod() {
     The gap between the two rankings is the curve at work: its sub-linear slope
     stops sheer size from crowning the board, and the category offsets and
     factors do the rest of the reordering.</p>
+    <p><strong>Out-of-sample.</strong> Sensitivity compares two pricings of the
+    same rows; it cannot say whether the fitted method generalises, because the
+    model is scored there on the very peers it was fitted on — partly a test of
+    memory. So the radar also runs the honest version. The peers are split by a
+    rule that reads nothing but each peer's slug — ${esc(R.oos.split)} — leaving
+    ${R.oos.fit_count} peers to fit on and ${R.oos.holdout.n} the refitted model
+    has never seen. Asked to price those ${R.oos.holdout.n} strangers, the
+    refit's fitted values rank their actual market caps at Spearman
+    ${R.oos.holdout.spearman.toFixed(2)}, and ${sharePct(R.oos.holdout.top_group_hit_rate)}
+    of its top ${R.oos.holdout.top_group_size} picks really sit in the holdout's
+    top half by market cap, against the ${sharePct(R.oos.holdout.base_rate)} a
+    blind pick would expect. The in-sample row below is the production fit
+    scored on all ${R.oos.in_sample.n} of its own peers; the distance between
+    the two rows is the optimism in grading memory, printed rather than hidden.
+    None of this changes the board: the board is priced by the full fit,
+    because a board should use every peer there is. The holdout's job is to say
+    how far the method can be trusted on protocols it has never seen — which is
+    exactly the board's own situation.</p>
+    <div class="oos-table" role="table" aria-label="Out-of-sample test results">
+      <div class="prow head"><span>Scored on</span><span>Peers</span><span>Spearman</span><span>Top-quartile hits</span></div>
+      <div class="prow"><span>Peers the fit never saw (holdout)</span><span>${R.oos.holdout.n}</span><span>${R.oos.holdout.spearman.toFixed(2)}</span><span>${sharePct(R.oos.holdout.top_group_hit_rate)} vs ${sharePct(R.oos.holdout.base_rate)} base</span></div>
+      <div class="prow"><span>The fit's own peers (in-sample)</span><span>${R.oos.in_sample.n}</span><span>${R.oos.in_sample.spearman.toFixed(2)}</span><span>${sharePct(R.oos.in_sample.top_group_hit_rate)} vs ${sharePct(R.oos.in_sample.base_rate)} base</span></div>
+    </div>
     <p><strong>Category offsets.</strong> Each category's peers vote for an
     intercept above or below the curve, shrunk toward zero by peer count
     (prior strength ${model.category_shrink_k}): a category with two peers is

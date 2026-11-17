@@ -65,6 +65,14 @@ function main(): void {
     `radar: ${rows.length} rows, ${watch.size} watchlist covered, ` +
       `#1 ${top.slug} at $${top.implied_value_usd.toLocaleString("en-US")}`,
   );
+  const oos = data.oos;
+  console.log(
+    `out-of-sample: refit on ${oos.fit_count} peers, scored on ` +
+      `${oos.holdout.n} held out — spearman ${oos.holdout.spearman}, ` +
+      `top-quartile hit rate ${oos.holdout.top_group_hit_rate} vs ` +
+      `${oos.holdout.base_rate} base; in-sample spearman ` +
+      `${oos.in_sample.spearman}, hit rate ${oos.in_sample.top_group_hit_rate}`,
+  );
 }
 
 main();

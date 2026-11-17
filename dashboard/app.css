@@ -133,6 +133,12 @@ button.trow:hover { background: var(--surface); }
 .method p strong { color: var(--text); }
 .method h3 { margin-top: 24px; }
 
+.oos-table { display: grid; gap: 4px; margin: 10px 0 6px; max-width: 720px; }
+.oos-table .prow.head {
+  background: transparent; border-color: transparent; color: var(--muted);
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+}
+
 footer {
   border-top: 1px solid var(--line); color: var(--muted);
   max-width: 1080px; margin: 24px auto 0; padding: 18px 20px 34px; font-size: 13.5px;

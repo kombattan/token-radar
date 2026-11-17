@@ -146,16 +146,28 @@ function olsSlope(xs: number[], ys: number[]): number {
   return varX > 0 ? cov / varX : 0;
 }
 
-/**
- * Fit the pricing model on the snapshot's tokenized peers: the base
- * log-log curve, shrunk category intercepts, then shrunk residual
- * slopes for momentum, breadth and age, fitted in that order so each
- * effect explains only what the previous ones left over.
- */
-export function fitModel(snapshot: Snapshot): ModelFit {
-  const peers = snapshot.protocols.filter(
+/** The snapshot's pricing evidence: tokenized protocols that carry
+ *  both a market cap and a TVL. */
+export function peerSet(snapshot: Snapshot): Protocol[] {
+  return snapshot.protocols.filter(
     (p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0,
   );
+}
+
+/** Fit the pricing model on the snapshot's tokenized peers. */
+export function fitModel(snapshot: Snapshot): ModelFit {
+  return fitOnPeers(peerSet(snapshot), snapshot.as_of);
+}
+
+/**
+ * Fit the pricing model on a given peer set: the base log-log curve,
+ * shrunk category intercepts, then shrunk residual slopes for
+ * momentum, breadth and age, fitted in that order so each effect
+ * explains only what the previous ones left over. fitModel is this
+ * with every peer; the out-of-sample test below calls it with the
+ * training split only, so both fits are the same specification.
+ */
+function fitOnPeers(peers: Protocol[], asOf: string): ModelFit {
   const xs = peers.map((p) => Math.log(p.tvl_usd));
   const ys = peers.map((p) => Math.log(p.mcap_usd as number));
   const n = peers.length;
@@ -213,7 +225,7 @@ export function fitModel(snapshot: Snapshot): ModelFit {
   const slopes = {
     momentum: slopeFor((p) => momentumOf(p)),
     breadth: slopeFor((p) => breadthOf(p)),
-    age: slopeFor((p) => ageCovariate(p, snapshot.as_of)),
+    age: slopeFor((p) => ageCovariate(p, asOf)),
   };
 
   return {
@@ -510,6 +522,154 @@ export function buildBoard(snapshot: Snapshot): BoardRow[] {
   return rows;
 }
 
+// ---------------------------------------------------------------------------
+// Out-of-sample test.
+//
+// The board is priced by the model fitted on every peer — that is the
+// production model, and a board should use all the evidence there is.
+// But a fit scored on its own peers is partly grading its memory, so
+// the radar also grades the method the honest way. The peer set is
+// split by a rule that reads nothing but each peer's slug: the FNV-1a
+// hash of the slug, mod 10, with residues 0, 1 and 2 held out (about
+// 30% of peers) and the rest forming the training set. The rule is
+// fixed by the ids alone, so the split is identical on every run and
+// cannot be tuned toward a kinder answer. The same specification —
+// curve, shrunk category offsets, shrunk residual slopes — is then
+// refitted on the training peers only and used to price the holdout
+// peers it never saw. Each holdout price is compared with the market
+// cap that peer actually carries, two ways: the Spearman rank
+// correlation between fitted price and actual cap, and a hit rate —
+// of the model's top quartile of holdout picks, the share that really
+// sit in the holdout's top half by market cap, against the base rate
+// (the top half's share of the holdout, what a blind pick expects).
+// The same two numbers are computed in-sample — the production fit
+// scored on all of its own peers — so the optimism gap between
+// grading memory and grading method is printed, not hidden. The
+// holdout never touches the board; it exists to say how far the
+// method can be trusted on protocols it has never seen, which is
+// exactly the board's own situation.
+
+/** FNV-1a 32-bit hash of a slug: the holdout split's only input. */
+function slugHash(slug: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < slug.length; i++) {
+    h ^= slug.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Holdout residues of slugHash(slug) mod 10: roughly 30% of peers. */
+const HOLDOUT_RESIDUES = new Set([0, 1, 2]);
+
+export interface PeerScore {
+  n: number;
+  spearman: number;
+  top_group_size: number;
+  top_group_hit_rate: number;
+  base_rate: number;
+}
+
+/** Ranks of the values, smallest first, ties sharing their mean rank. */
+function ranksOf(values: number[]): number[] {
+  const order = values
+    .map((v, i) => [v, i] as const)
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const ranks = new Array<number>(values.length);
+  let i = 0;
+  while (i < order.length) {
+    let j = i;
+    while (j + 1 < order.length && order[j + 1][0] === order[i][0]) j++;
+    const rank = (i + j) / 2 + 1;
+    for (let k = i; k <= j; k++) ranks[order[k][1]] = rank;
+    i = j + 1;
+  }
+  return ranks;
+}
+
+function pearson(xs: number[], ys: number[]): number {
+  const n = xs.length;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let cov = 0;
+  let varX = 0;
+  let varY = 0;
+  for (let i = 0; i < n; i++) {
+    cov += (xs[i] - mx) * (ys[i] - my);
+    varX += (xs[i] - mx) * (xs[i] - mx);
+    varY += (ys[i] - my) * (ys[i] - my);
+  }
+  return varX > 0 && varY > 0 ? cov / Math.sqrt(varX * varY) : 0;
+}
+
+function spearmanOf(xs: number[], ys: number[]): number {
+  return pearson(ranksOf(xs), ranksOf(ys));
+}
+
+/**
+ * Score a fit against peers that carry real market caps: price each
+ * peer with the fit and compare the prices with the caps the market
+ * actually gave them. Used for the holdout (peers the fit never saw)
+ * and in-sample (the fit's own peers) alike.
+ */
+function scoreFitOnPeers(
+  fit: ModelFit,
+  peers: Protocol[],
+  asOf: string,
+): PeerScore {
+  const predicted = peers.map((p) => priceRow(p, fit, asOf).implied);
+  const actual = peers.map((p) => p.mcap_usd as number);
+  const n = peers.length;
+  const topSize = Math.max(1, Math.ceil(n / 4));
+  const halfSize = Math.max(1, Math.ceil(n / 2));
+  const byPredicted = peers
+    .map((_, i) => i)
+    .sort(
+      (a, b) =>
+        predicted[b] - predicted[a] || peers[a].slug.localeCompare(peers[b].slug),
+    );
+  const byActual = peers
+    .map((_, i) => i)
+    .sort(
+      (a, b) =>
+        actual[b] - actual[a] || peers[a].slug.localeCompare(peers[b].slug),
+    );
+  const realisedTopHalf = new Set(byActual.slice(0, halfSize));
+  const hits = byPredicted
+    .slice(0, topSize)
+    .filter((i) => realisedTopHalf.has(i)).length;
+  return {
+    n,
+    spearman: round4(spearmanOf(predicted, actual)),
+    top_group_size: topSize,
+    top_group_hit_rate: round4(hits / topSize),
+    base_rate: round4(halfSize / n),
+  };
+}
+
+export interface OutOfSample {
+  split: string;
+  fit_count: number;
+  holdout: PeerScore;
+  in_sample: PeerScore;
+}
+
+/** The holdout evaluation described above, computed from the snapshot. */
+export function outOfSampleTest(snapshot: Snapshot): OutOfSample {
+  const peers = peerSet(snapshot);
+  const heldOut = (p: Protocol) => HOLDOUT_RESIDUES.has(slugHash(p.slug) % 10);
+  const training = peers.filter((p) => !heldOut(p));
+  const holdout = peers.filter(heldOut);
+  const splitFit = fitOnPeers(training, snapshot.as_of);
+  return {
+    split:
+      "FNV-1a hash of the peer's slug, mod 10: residues 0, 1 and 2 are held out",
+    fit_count: training.length,
+    holdout: scoreFitOnPeers(splitFit, holdout, snapshot.as_of),
+    in_sample: scoreFitOnPeers(fitModel(snapshot), peers, snapshot.as_of),
+  };
+}
+
 /** The dashboard's data payload: the board, the fitted model with its
  *  parameters, and the tokenized peer set, so the page can recompute
  *  every row's price in front of the reader from the same figures. */
@@ -594,5 +754,6 @@ export function dashboardData(snapshot: Snapshot, rows: BoardRow[]) {
     rows,
     peers,
     categories,
+    oos: outOfSampleTest(snapshot),
   };
 }
